@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "http_p.h"
+
 #define PORT 8000
 #define LISTEN_BACKLOG 10
 #define MSG_BUFFER_SIZE 2048
@@ -28,7 +30,9 @@ void hadle_client(int client_sfd)
     char buf[MSG_BUFFER_SIZE];
 
     read(client_sfd, buf, MSG_BUFFER_SIZE);
-    printf("%s", buf);
+
+    struct http_request req = parse_http_request(buf);
+    printf("\nParsed line: %u, %s\n\n", req.method, req.path);
 }
 
 int main()
