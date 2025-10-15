@@ -2,54 +2,49 @@
 #include <stdlib.h>
 
 #define DEFAULT_HEADERS_SIZE 40
-#define MAX_HEADER_NAME 256
-#define MAX_HEADER_DATA 512
-#define HTTP_PROTOCOL "HTTP/1.1"
+#define HTTP_PROTOCOLV "HTTP/1.1"
 
-enum http_method {
-    GET,
-    POST,
-    DELETE,
-    UNRECOGNIZED
-};
+typedef char* http_method_t;
 
-enum http_status_code {
+typedef enum http_status_code {
     SWITCHING_PROTOCOL = 101,
     OK = 200, 
-};
+} http_status_code_t;
 
 struct http_header {
     char* name;
     char* data;
 };
 
+struct http_headers_array {
+    struct http_header* arr;
+    size_t length;
+    size_t capacity;
+};
+
 struct http_request {
-    const char* path;
-    const char* protocol_v;
-    enum http_method method;
-    struct http_header* headers; // Array
-    size_t headers_length;
+    http_method_t method;
+    char* path;
+    struct http_headers_array headers;
 };
 
 struct http_response {
-    const char* protocol_v;
-    enum http_status_code code;
-    struct http_header* headers; // Array
-    size_t headers_length;
+    http_status_code_t status;
+    struct http_headers_array headers;
 };
 
-// To identify the error, see if protocol_v != NULL
-struct http_request parse_http_request(char* req);
+const char* http_get_request_param(struct http_request req, const char* name);
 
-struct http_response new_http_response(enum http_status_code code); 
+struct http_request http_parse_request(char* message);
+
+struct http_response http_new_response(http_status_code_t status);
 
 void http_response_append_header(struct http_response* res, const char* name, const char* data);
 
 const char* http_compose_response(struct http_response res);
 
-const char* http_get_request_param(struct http_request req, const char* name);
+void http_destroy_request(struct http_request req);
 
-// Frees request
-void destroy_request(struct http_request req);
+void http_destroy_response(struct http_response res);
 
 #endif // _HTTP_PARSER_H

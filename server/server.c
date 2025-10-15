@@ -1,3 +1,4 @@
+#include <string.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <stdio.h>
@@ -29,13 +30,17 @@ const char*
 handle_handshake(const char* req_key)
 {
     char* signed_key = sign_key(req_key);
+    
 
-    struct http_response res = new_http_response(SWITCHING_PROTOCOL);
+    struct http_response res = http_new_response(SWITCHING_PROTOCOL);
+
     http_response_append_header(&res, "Upgrade", "websocket");
     http_response_append_header(&res, "Connection", "Upgrade");
     http_response_append_header(&res, "Sec-WebSocket-Accept", signed_key);
 
-    return http_compose_response(res);
+    const char* out = http_compose_response(res);
+    http_destroy_response(res);
+    return out;
 }
 
 void 
@@ -47,16 +52,17 @@ hadle_client(int client_sfd)
     read(client_sfd, buf, MSG_BUFFER_SIZE);
 
     printf("Got request: \n%s\n", buf);
-    struct http_request req = parse_http_request(buf);
+    struct http_request req = http_parse_request(buf);
 
     const char* req_key = http_get_request_param(req, "Sec-WebSocket-Key");
 
-    if (req.method == GET && req_key) {
+    if (strcmp(req.method, "GET") == 0 && req_key) {
         const char* res = handle_handshake(req_key);
         printf("Composed response: \n%s\n", res);
-
-        write(client_sfd, res, sizeof(res));
+        write(client_sfd, res, strlen(res));
     }
+
+    http_destroy_request(req);
 }
 
 int 
@@ -95,6 +101,7 @@ main()
         
         printf("Client accepted\n");
         hadle_client(client_sfd);
+        close(client_sfd);
     }
 
     return 0;
