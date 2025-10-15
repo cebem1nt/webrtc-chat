@@ -12,6 +12,6 @@ class SignalServer {
 }
 
 async function start() {
-    const sc = new SignalServer("ws://localhost:8000")
+    const sc = new SignalServer("ws://localhost:8080")
     sc.sendMessage({"message": "Hello world!!"});
 }

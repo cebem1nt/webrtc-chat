@@ -1,8 +1,8 @@
 #include "http_p.h"
 #include <cstddef>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
-#include <iostream>
-#include <ostream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -32,10 +32,10 @@ parse_request_line(struct http_request* hr, std::string line)
     std::vector<std::string> reqs;
     std::stringstream ss(line);
 
-    std::string item;
+    std::string token;
 
-    while (std::getline(ss, item, ' ')) {
-        reqs.push_back(item);
+    while (std::getline(ss, token, ' ')) {
+        reqs.push_back(token);
     }
 
     if (reqs.size() != 3) {
@@ -44,30 +44,48 @@ parse_request_line(struct http_request* hr, std::string line)
 
     hr->method = get_method_enum(reqs[0]);
     hr->path = reqs[1].c_str();
-    hr->protocol_v = reqs[2].c_str(); // We don't really care about protocoll
+    hr->protocol_v = reqs[2].c_str();
 
     return 0;
+}
+
+static void
+parse_header_line(struct http_request* req, std::string line) 
+{
+    size_t colon_pos;
+
+    std::string header;
+    std::string content;
+
+    colon_pos = line.find(':');
+    header = line.substr(0, colon_pos);
+    content = line.substr(colon_pos + 2, std::string::npos);
+
+    req->headers[req->headers_length].name = strdup(header.c_str());
+    req->headers[req->headers_length].data = strdup(content.c_str());
+    req->headers_length++;
 }
 
 struct http_request 
 parse_http_request(char* req) 
 {
     struct http_request hr = {0};
-    char*  line = std::strtok(req, HTTP_DELIMETER);
+    hr.headers = new http_header[DEFAULT_HEADERS_SIZE];
+    hr.headers_length = 0;
 
-    // Parsing request line (GET / HTTP/1.1)
+    char* line = std::strtok(req, HTTP_DELIMETER);
+
+    // Parsing request line (GET /home HTTP/1.1)
     if (parse_request_line(&hr, line) != 0) {
         hr.protocol_v = NULL;
         return hr;
     }
-
-    size_t line_count = 0;
-
+    // Skipping the line
+    line = std::strtok(nullptr, HTTP_DELIMETER);
+ 
     while (line != nullptr) {
-        ++line_count;
-        std::cout << line << std::endl;
-
-        line = strtok(nullptr, HTTP_DELIMETER);
+        parse_header_line(&hr, line);
+        line = std::strtok(nullptr, HTTP_DELIMETER);
     }
 
     return hr;

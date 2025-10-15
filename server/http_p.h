@@ -1,6 +1,9 @@
 #ifndef _HTTP_PARSER_H
 #include <stdlib.h>
-#define MAX_HEADER_NAME_SIZE 256
+
+#define DEFAULT_HEADERS_SIZE 40
+#define MAX_HEADER_NAME 256
+#define MAX_HEADER_DATA 512
 
 enum http_method {
     GET,
@@ -10,15 +13,15 @@ enum http_method {
 };
 
 struct http_header {
-    char  name[MAX_HEADER_NAME_SIZE];
+    char* name;
     char* data;
 };
 
 struct http_request {
     const char* path;
     const char* protocol_v;
-    enum http_method  method;
-    struct http_header* headers;
+    enum http_method method;
+    struct http_header* headers; // Array
     size_t headers_length;
 };
 
