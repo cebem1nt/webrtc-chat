@@ -1,4 +1,3 @@
-#include <asm-generic/socket.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <stdio.h>
@@ -6,6 +5,7 @@
 #include <unistd.h>
 
 #include "http_p.h"
+#include "crypt.h"
 
 #define PORT 8080
 #define LISTEN_BACKLOG 10
@@ -18,28 +18,52 @@
  * TODO We need asynchrony
  */
 
-void err_exit(const char* reason) 
+void 
+err_exit(const char* reason) 
 {
     perror(reason);
     exit(EXIT_FAILURE);
 }
 
-void hadle_client(int client_sfd) 
+const char*
+handle_handshake(const char* req_key)
+{
+    unsigned char signature[SHA1_BLOCK_SIZE];
+    
+    SHA1((unsigned char*)req_key, sizeof(req_key), signature);
+
+    struct http_response res = new_http_response(SWITCHING_PROTOCOL);
+    http_response_append_header(&res, "Upgrade", "websocket");
+    http_response_append_header(&res, "Connection", "Upgrade");
+    http_response_append_header(&res, "Sec-WebSocket-Accept", (char*)signature);
+
+    return http_compose_response(res);
+}
+
+void 
+hadle_client(int client_sfd) 
 {
     // Basicaly for now we have to handle the
     // Websocket handshake using http requests
     char buf[MSG_BUFFER_SIZE];
     read(client_sfd, buf, MSG_BUFFER_SIZE);
 
+    printf("Got request: \n%s\n", buf);
     struct http_request req = parse_http_request(buf);
-    printf("Lines: %zu\n", req.headers_length);
 
-    for (int i = 0; i < req.headers_length; i++) {
-        printf("Header - %s: %s\n", req.headers[i].name, req.headers[i].data);
+    const char* req_key = http_get_request_param(req, "Sec-WebSocket-Key");
+
+    if (req.method == GET && req_key) {
+        const char* res = handle_handshake(req_key);
+        printf("Composed response: \n%s\n", res);
+
+        write(client_sfd, res, sizeof(res));
     }
+
 }
 
-int main()
+int 
+main()
 {
     int server_sfd;
     int client_sfd;
