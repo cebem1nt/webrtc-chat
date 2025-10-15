@@ -10,6 +10,18 @@
 
 #define HTTP_DELIMETER "\r\n"
 
+static std::string 
+trim(const std::string& str) {
+    size_t start = str.find_first_not_of(" \t\n");
+    size_t end = str.find_last_not_of(" \t\n");
+    
+    if (start == std::string::npos) {
+        return "";
+    }
+    
+    return str.substr(start, end - start + 1);
+}
+
 static std::string
 get_status_message(enum http_status_code c) 
 {
@@ -66,6 +78,9 @@ parse_header_line(struct http_request& req, std::string line)
     header_name = line.substr(0, colon_pos);
     header_content = line.substr(colon_pos+1, std::string::npos);
 
+    header_name = trim(header_name);
+    header_content = trim(header_content);
+
     if (req.headers.length + 1 > req.headers.capacity) {
         resize_headers_array(&req.headers);
     }
@@ -118,7 +133,7 @@ struct http_response
 http_new_response(http_status_code_t status) 
 {
     struct http_response res;
-    
+
     res.headers.arr = new http_header[DEFAULT_HEADERS_SIZE];
     res.headers.capacity = DEFAULT_HEADERS_SIZE;
     res.headers.length = 0;

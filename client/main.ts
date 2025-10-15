@@ -3,10 +3,10 @@ class SignalServer {
     
     constructor (url: string) {
         this.socket = new WebSocket(url)
-        console.log(this.socket)
 
         this.socket.addEventListener("open", (event) => {
-            this.socket.send("Hello Server!");
+            // The hardest hello world so far. Im proud of it.
+            console.log("Hello world!!")
         });
     }
 
@@ -17,4 +17,5 @@ class SignalServer {
 
 async function start() {
     const sc = new SignalServer("ws://localhost:8080")
+    console.log(sc);
 }
