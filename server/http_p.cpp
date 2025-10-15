@@ -29,7 +29,7 @@ get_status_message(enum http_status_code c)
 {
     switch (c) {
     case SWITCHING_PROTOCOL:
-        return "Switching Protocol";
+        return "Switching Protocols";
     case OK:
         return "OK";
     }
@@ -154,6 +154,8 @@ http_compose_response(struct http_response res)
         ss << header.name << ": " << header.data
            << HTTP_DELIMETER;
     }
+
+    ss << HTTP_DELIMETER;
 
     std::string out = ss.str();
     return strdup(out.c_str());

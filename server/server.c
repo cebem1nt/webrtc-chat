@@ -28,14 +28,12 @@ err_exit(const char* reason)
 const char*
 handle_handshake(const char* req_key)
 {
-    unsigned char signature[SHA1_BLOCK_SIZE];
-    
-    SHA1((unsigned char*)req_key, sizeof(req_key), signature);
+    char* signed_key = sign_key(req_key);
 
     struct http_response res = new_http_response(SWITCHING_PROTOCOL);
     http_response_append_header(&res, "Upgrade", "websocket");
     http_response_append_header(&res, "Connection", "Upgrade");
-    http_response_append_header(&res, "Sec-WebSocket-Accept", (char*)signature);
+    http_response_append_header(&res, "Sec-WebSocket-Accept", signed_key);
 
     return http_compose_response(res);
 }
@@ -59,7 +57,6 @@ hadle_client(int client_sfd)
 
         write(client_sfd, res, sizeof(res));
     }
-
 }
 
 int 

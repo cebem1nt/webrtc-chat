@@ -6,198 +6,269 @@
  * Unfortunately not c lib nor c++ has base64 / sha1 in it
  * Also im not a cryptography specialist so both base64 and sha1 are copypasted
  *
- * Base64: https://stackoverflow.com/questions/342409/how-do-i-base64-encode-decode-in-c
- * SHA1:   https://github.com/halloweeks/sha1/blob/main/sha1.h
+ * Base64: https://web.mit.edu/freebsd/head/contrib/wpa/src/utils/base64.c
+ * SHA1:   https://github.com/zaphoyd/websocketpp/blob/master/websocketpp/sha1/sha1.hpp
  */
 
-
-#include "crypt.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <memory.h>
+#include <string.h>
 
-#define ROTLEFT(a, b) ((a << b) | (a >> (32 - b)))
+#include "crypt.h"
 
-static char encoding_table[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
-                                'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
-                                'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
-                                'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
-                                'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
-                                'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
-                                'w', 'x', 'y', 'z', '0', '1', '2', '3',
-                                '4', '5', '6', '7', '8', '9', '+', '/'};
-static int mod_table[] = {0, 2, 1};
+/*
+ * The key you have to concatenate with provided client one
+ * to accpet the web-scoket comunication.
+ * https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_servers#server_handshake_response 
+ */
+#define GUID "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
-typedef struct {
-	unsigned char data[64];
-	unsigned int datalen;
-	unsigned long long bitlen;
-	unsigned int state[5];
-	unsigned int k[4];
-} SHA1_CTX;
+static const unsigned char base64_table[65] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-char* base64_encode(const unsigned char* data,
-                    size_t  input_length,
-                    size_t* output_length) {
-
-    *output_length = 4 * ((input_length + 2) / 3);
-
-    char* encoded_data = (char*) malloc(*output_length);
-    if (encoded_data == NULL) return NULL;
-
-    for (int i = 0, j = 0; i < input_length;) {
-
-        uint32_t octet_a = i < input_length ? (unsigned char)data[i++] : 0;
-        uint32_t octet_b = i < input_length ? (unsigned char)data[i++] : 0;
-        uint32_t octet_c = i < input_length ? (unsigned char)data[i++] : 0;
-
-        uint32_t triple = (octet_a << 0x10) + (octet_b << 0x08) + octet_c;
-
-        encoded_data[j++] = encoding_table[(triple >> 3 * 6) & 0x3F];
-        encoded_data[j++] = encoding_table[(triple >> 2 * 6) & 0x3F];
-        encoded_data[j++] = encoding_table[(triple >> 1 * 6) & 0x3F];
-        encoded_data[j++] = encoding_table[(triple >> 0 * 6) & 0x3F];
-    }
-
-    for (int i = 0; i < mod_table[input_length % 3]; i++)
-        encoded_data[*output_length - 1 - i] = '=';
-
-    return encoded_data;
-}
-
-void sha1_transform(SHA1_CTX *ctx, const unsigned char data[])
+unsigned char* base64_encode(const unsigned char *src, size_t len)
 {
-	unsigned int a, b, c, d, e, i, j, t, m[80];
+	unsigned char *out, *pos;
+	const unsigned char *end, *in;
+	size_t olen;
+	int line_len;
 
-	for (i = 0, j = 0; i < 16; ++i, j += 4)
-		m[i] = (data[j] << 24) + (data[j + 1] << 16) + (data[j + 2] << 8) + (data[j + 3]);
-	for ( ; i < 80; ++i) {
-		m[i] = (m[i - 3] ^ m[i - 8] ^ m[i - 14] ^ m[i - 16]);
-		m[i] = (m[i] << 1) | (m[i] >> 31);
-	}
+	olen = len * 4 / 3 + 4; /* 3-byte blocks to 4-byte */
+	olen += olen / 72; /* line feeds */
+	olen++; /* nul termination */
+	if (olen < len)
+		return NULL; /* integer overflow */
+	out = (unsigned char*) malloc(olen);
+	if (out == NULL)
+		return NULL;
 
-	a = ctx->state[0];
-	b = ctx->state[1];
-	c = ctx->state[2];
-	d = ctx->state[3];
-	e = ctx->state[4];
-
-	for (i = 0; i < 20; ++i) {
-		t = ROTLEFT(a, 5) + ((b & c) ^ (~b & d)) + e + ctx->k[0] + m[i];
-		e = d;
-		d = c;
-		c = ROTLEFT(b, 30);
-		b = a;
-		a = t;
-	}
-	for ( ; i < 40; ++i) {
-		t = ROTLEFT(a, 5) + (b ^ c ^ d) + e + ctx->k[1] + m[i];
-		e = d;
-		d = c;
-		c = ROTLEFT(b, 30);
-		b = a;
-		a = t;
-	}
-	for ( ; i < 60; ++i) {
-		t = ROTLEFT(a, 5) + ((b & c) ^ (b & d) ^ (c & d))  + e + ctx->k[2] + m[i];
-		e = d;
-		d = c;
-		c = ROTLEFT(b, 30);
-		b = a;
-		a = t;
-	}
-	for ( ; i < 80; ++i) {
-		t = ROTLEFT(a, 5) + (b ^ c ^ d) + e + ctx->k[3] + m[i];
-		e = d;
-		d = c;
-		c = ROTLEFT(b, 30);
-		b = a;
-		a = t;
-	}
-
-	ctx->state[0] += a;
-	ctx->state[1] += b;
-	ctx->state[2] += c;
-	ctx->state[3] += d;
-	ctx->state[4] += e;
-}
-
-void SHA1_Init(SHA1_CTX *ctx)
-{
-	ctx->datalen = 0;
-	ctx->bitlen = 0;
-	ctx->state[0] = 0x67452301;
-	ctx->state[1] = 0xEFCDAB89;
-	ctx->state[2] = 0x98BADCFE;
-	ctx->state[3] = 0x10325476;
-	ctx->state[4] = 0xc3d2e1f0;
-	ctx->k[0] = 0x5a827999;
-	ctx->k[1] = 0x6ed9eba1;
-	ctx->k[2] = 0x8f1bbcdc;
-	ctx->k[3] = 0xca62c1d6;
-}
-
-void SHA1_Update(SHA1_CTX *ctx, const unsigned char data[], size_t len)
-{
-	size_t i;
-
-	for (i = 0; i < len; ++i) {
-		ctx->data[ctx->datalen] = data[i];
-		ctx->datalen++;
-		if (ctx->datalen == 64) {
-			sha1_transform(ctx, ctx->data);
-			ctx->bitlen += 512;
-			ctx->datalen = 0;
+	end = src + len;
+	in = src;
+	pos = out;
+	line_len = 0;
+	while (end - in >= 3) {
+		*pos++ = base64_table[in[0] >> 2];
+		*pos++ = base64_table[((in[0] & 0x03) << 4) | (in[1] >> 4)];
+		*pos++ = base64_table[((in[1] & 0x0f) << 2) | (in[2] >> 6)];
+		*pos++ = base64_table[in[2] & 0x3f];
+		in += 3;
+		line_len += 4;
+		if (line_len >= 72) {
+			*pos++ = '\n';
+			line_len = 0;
 		}
 	}
+
+	if (end - in) {
+		*pos++ = base64_table[in[0] >> 2];
+		if (end - in == 1) {
+			*pos++ = base64_table[(in[0] & 0x03) << 4];
+			*pos++ = '=';
+		} else {
+			*pos++ = base64_table[((in[0] & 0x03) << 4) |
+					      (in[1] >> 4)];
+			*pos++ = base64_table[(in[1] & 0x0f) << 2];
+		}
+		*pos++ = '=';
+		line_len += 4;
+	}
+
+	if (line_len)
+		*pos++ = '\n';
+
+	*pos = '\0';
+	return out;
 }
 
-void SHA1_Final(SHA1_CTX *ctx, unsigned char hash[])
+/*
+*****
+sha1.hpp is a repackaging of the sha1.cpp and sha1.h files from the smallsha1
+library (http://code.google.com/p/smallsha1/) into a single header suitable for
+use as a header only library. This conversion was done by Peter Thorson
+(webmaster@zaphoyd.com) in 2013. All modifications to the code are redistributed
+under the same license as the original, which is listed below.
+*****
+
+ Copyright (c) 2011, Micael Hildenborg
+ All rights reserved.
+
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are met:
+    * Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+    * Neither the name of Micael Hildenborg nor the
+      names of its contributors may be used to endorse or promote products
+      derived from this software without specific prior written permission.
+
+ THIS SOFTWARE IS PROVIDED BY Micael Hildenborg ''AS IS'' AND ANY
+ EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ DISCLAIMED. IN NO EVENT SHALL Micael Hildenborg BE LIABLE FOR ANY
+ DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+// Rotate an integer value to left.
+static unsigned int rol(unsigned int value, unsigned int steps) {
+    return ((value << steps) | (value >> (32 - steps)));
+}
+
+// Sets the first 16 integers in the buffert to zero.
+// Used for clearing the W buffert.
+static void clearWBuffert(unsigned int * buffert)
 {
-	unsigned int i;
-
-	i = ctx->datalen;
-
-	// Pad whatever data is left in the buffer.
-	if (ctx->datalen < 56) {
-		ctx->data[i++] = 0x80;
-		while (i < 56)
-			ctx->data[i++] = 0x00;
-	}
-	else {
-		ctx->data[i++] = 0x80;
-		while (i < 64)
-			ctx->data[i++] = 0x00;
-		sha1_transform(ctx, ctx->data);
-		memset(ctx->data, 0, 56);
-	}
-
-	// Append to the padding the total message's length in bits and transform.
-	ctx->bitlen += ctx->datalen * 8;
-	ctx->data[63] = ctx->bitlen;
-	ctx->data[62] = ctx->bitlen >> 8;
-	ctx->data[61] = ctx->bitlen >> 16;
-	ctx->data[60] = ctx->bitlen >> 24;
-	ctx->data[59] = ctx->bitlen >> 32;
-	ctx->data[58] = ctx->bitlen >> 40;
-	ctx->data[57] = ctx->bitlen >> 48;
-	ctx->data[56] = ctx->bitlen >> 56;
-	sha1_transform(ctx, ctx->data);
-
-	// Since this implementation uses little endian byte ordering and MD uses big endian,
-	// reverse all the bytes when copying the final state to the output hash.
-	for (i = 0; i < 4; ++i) {
-		hash[i]      = (ctx->state[0] >> (24 - i * 8)) & 0x000000ff;
-		hash[i + 4]  = (ctx->state[1] >> (24 - i * 8)) & 0x000000ff;
-		hash[i + 8]  = (ctx->state[2] >> (24 - i * 8)) & 0x000000ff;
-		hash[i + 12] = (ctx->state[3] >> (24 - i * 8)) & 0x000000ff;
-		hash[i + 16] = (ctx->state[4] >> (24 - i * 8)) & 0x000000ff;
-	}
+    for (int pos = 16; --pos >= 0;)
+    {
+        buffert[pos] = 0;
+    }
 }
 
-void SHA1(const unsigned char *data, size_t size, unsigned char hash[SHA1_BLOCK_SIZE]) {
-	SHA1_CTX ctx;
-	SHA1_Init(&ctx);
-	SHA1_Update(&ctx, data, size);
-	SHA1_Final(&ctx, hash);
+static void innerHash(unsigned int * result, unsigned int * w)
+{
+    unsigned int a = result[0];
+    unsigned int b = result[1];
+    unsigned int c = result[2];
+    unsigned int d = result[3];
+    unsigned int e = result[4];
+
+    int round = 0;
+
+    #define sha1macro(func,val) \
+    { \
+        const unsigned int t = rol(a, 5) + (func) + e + val + w[round]; \
+        e = d; \
+        d = c; \
+        c = rol(b, 30); \
+        b = a; \
+        a = t; \
+    }
+
+    while (round < 16)
+    {
+        sha1macro((b & c) | (~b & d), 0x5a827999)
+        ++round;
+    }
+    while (round < 20)
+    {
+        w[round] = rol((w[round - 3] ^ w[round - 8] ^ w[round - 14] ^ w[round - 16]), 1);
+        sha1macro((b & c) | (~b & d), 0x5a827999)
+        ++round;
+    }
+    while (round < 40)
+    {
+        w[round] = rol((w[round - 3] ^ w[round - 8] ^ w[round - 14] ^ w[round - 16]), 1);
+        sha1macro(b ^ c ^ d, 0x6ed9eba1)
+        ++round;
+    }
+    while (round < 60)
+    {
+        w[round] = rol((w[round - 3] ^ w[round - 8] ^ w[round - 14] ^ w[round - 16]), 1);
+        sha1macro((b & c) | (b & d) | (c & d), 0x8f1bbcdc)
+        ++round;
+    }
+    while (round < 80)
+    {
+        w[round] = rol((w[round - 3] ^ w[round - 8] ^ w[round - 14] ^ w[round - 16]), 1);
+        sha1macro(b ^ c ^ d, 0xca62c1d6)
+        ++round;
+    }
+
+    #undef sha1macro
+
+    result[0] += a;
+    result[1] += b;
+    result[2] += c;
+    result[3] += d;
+    result[4] += e;
+}
+
+void SHA1(void* src, size_t bytelength, unsigned char * hash) 
+{
+    // Init the result array.
+    unsigned int result[5] = { 0x67452301, 0xefcdab89, 0x98badcfe,
+                               0x10325476, 0xc3d2e1f0 };
+
+    // Cast the void src pointer to be the byte array we can work with.
+    unsigned char const * sarray = (unsigned char const *) src;
+
+    // The reusable round buffer
+    unsigned int w[80];
+
+    // Loop through all complete 64byte blocks.
+    size_t endCurrentBlock;
+    size_t currentBlock = 0;
+
+    if (bytelength >= 64) {
+        size_t const endOfFullBlocks = bytelength - 64;
+
+        while (currentBlock <= endOfFullBlocks) {
+            endCurrentBlock = currentBlock + 64;
+
+            // Init the round buffer with the 64 byte block data.
+            for (int roundPos = 0; currentBlock < endCurrentBlock; currentBlock += 4)
+            {
+                // This line will swap endian on big endian and keep endian on
+                // little endian.
+                w[roundPos++] = (unsigned int) sarray[currentBlock + 3]
+                        | (((unsigned int) sarray[currentBlock + 2]) << 8)
+                        | (((unsigned int) sarray[currentBlock + 1]) << 16)
+                        | (((unsigned int) sarray[currentBlock]) << 24);
+            }
+            innerHash(result, w);
+        }
+    }
+
+    // Handle the last and not full 64 byte block if existing.
+    endCurrentBlock = bytelength - currentBlock;
+    clearWBuffert(w);
+    size_t lastBlockBytes = 0;
+    for (;lastBlockBytes < endCurrentBlock; ++lastBlockBytes) {
+        w[lastBlockBytes >> 2] |= (unsigned int) sarray[lastBlockBytes + currentBlock] << ((3 - (lastBlockBytes & 3)) << 3);
+    }
+
+    w[lastBlockBytes >> 2] |= 0x80 << ((3 - (lastBlockBytes & 3)) << 3);
+    if (endCurrentBlock >= 56) {
+        innerHash(result, w);
+        clearWBuffert(w);
+    }
+    w[15] = bytelength << 3;
+    innerHash(result, w);
+
+    // Store hash in result pointer, and make sure we get in in the correct
+    // order on both endian models.
+    for (int hashByte = 20; --hashByte >= 0;) {
+        hash[hashByte] = (result[hashByte >> 2] >> (((3 - hashByte) & 0x3) << 3)) & 0xff;
+    }
+}
+
+static char* concat(const char* s1, const char* s2) 
+{
+	char* out = (char*) malloc(strlen(s1) + strlen(s2) + 1);
+	if (!out)
+		return NULL;
+
+	strcpy(out, s1);
+	strcat(out, s2);
+
+	return out;
+}
+
+char* sign_key(const char* key)
+{
+	char* combined_key = concat(key, GUID);
+	unsigned char hash[SHA1_BLOCK_SIZE];
+	unsigned char* signature;
+
+	SHA1(combined_key, strlen(combined_key), hash);
+	signature = base64_encode(hash, SHA1_BLOCK_SIZE);
+
+	free(combined_key);
+	return (char*) signature;
 }

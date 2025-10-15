@@ -4,6 +4,10 @@ class SignalServer {
     constructor (url: string) {
         this.socket = new WebSocket(url)
         console.log(this.socket)
+
+        this.socket.addEventListener("open", (event) => {
+            this.socket.send("Hello Server!");
+        });
     }
 
     public sendMessage(msg: object) {
@@ -13,5 +17,4 @@ class SignalServer {
 
 async function start() {
     const sc = new SignalServer("ws://localhost:8080")
-    sc.sendMessage({"message": "Hello world!!"});
 }
