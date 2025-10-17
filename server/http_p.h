@@ -33,18 +33,42 @@ struct http_response {
     struct http_headers_array headers;
 };
 
-const char* http_get_request_param(struct http_request req, const char* name);
+/*
+ * Returns value of the header with given name.
+ */
+const char* http_get_header_value(struct http_request req, const char* name);
 
+/*
+ * Returns new http_request based on the given raw message
+ */
 struct http_request http_parse_request(char* message);
 
+/*
+ * Initializes new http_response with provided status code
+ * Sets only response status to new response. Without any headers
+ */
 struct http_response http_new_response(http_status_code_t status);
 
+/*
+ * Appends new header to response based on name
+ * and its coresponding data.
+ */
 void http_response_append_header(struct http_response* res, const char* name, const char* data);
 
+/*
+ * Returns a string representing the HTTP response
+ * based on the given http_response structure 
+ */
 const char* http_compose_response(struct http_response res);
 
+/*
+ * Frees the given request
+ */
 void http_destroy_request(struct http_request req);
 
+/*
+ * Frees the given response
+ */
 void http_destroy_response(struct http_response res);
 
 #endif // _HTTP_PARSER_H

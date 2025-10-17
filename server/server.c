@@ -1,6 +1,6 @@
-#include <string.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -10,7 +10,7 @@
 
 #define PORT 8080
 #define LISTEN_BACKLOG 10
-#define MSG_BUFFER_SIZE 2048
+#define MAX_MSG_SIZE 2048
 
 /* 
  * manpages: socket(2), sockaddr_in, listen(2),
@@ -30,7 +30,6 @@ const char*
 handle_handshake(const char* req_key)
 {
     char* signed_key = sign_key(req_key);
-    
 
     struct http_response res = http_new_response(SWITCHING_PROTOCOL);
 
@@ -46,23 +45,26 @@ handle_handshake(const char* req_key)
 void 
 hadle_client(int client_sfd) 
 {
-    // Basicaly for now we have to handle the
-    // Websocket handshake using http requests
-    char buf[MSG_BUFFER_SIZE];
-    read(client_sfd, buf, MSG_BUFFER_SIZE);
+    char buf[MAX_MSG_SIZE];
+    ssize_t n;
 
-    printf("Got request: \n%s\n", buf);
-    struct http_request req = http_parse_request(buf);
+    while ((n = read(client_sfd, buf, MAX_MSG_SIZE)) > 0) {
+        printf("Got request: \n%s\n", buf);
+        printf("Request size: %zd\n", n);
 
-    const char* req_key = http_get_request_param(req, "Sec-WebSocket-Key");
+        struct http_request req = http_parse_request(buf);
+        const char* req_key = http_get_header_value(req, "Sec-WebSocket-Key");
 
-    if (strcmp(req.method, "GET") == 0 && req_key) {
-        const char* res = handle_handshake(req_key);
-        printf("Composed response: \n%s\n", res);
-        write(client_sfd, res, strlen(res));
+        if (strcmp(req.method, "GET") == 0 && req_key) {
+            const char* res = handle_handshake(req_key);
+            printf("Composed response: \n%s\n", res);
+            write(client_sfd, res, strlen(res));
+        }
+
+        http_destroy_request(req);
     }
 
-    http_destroy_request(req);
+    printf("Bye client!\n");
 }
 
 int 

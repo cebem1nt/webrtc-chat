@@ -91,7 +91,7 @@ parse_header_line(struct http_request& req, std::string line)
 }
 
 const char*
-http_get_request_param(struct http_request req, const char* name) 
+http_get_header_value(struct http_request req, const char* name)
 {
     // I realy don't want to put a hashmap 
     // so this will be just a for loop
