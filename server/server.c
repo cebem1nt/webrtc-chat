@@ -5,9 +5,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "frames.h"
-#include "http_p.h"
-#include "crypt.h"
+#include "include/frames.h"
+#include "include/http_p.h"
+#include "include/crypt.h"
 
 #define PORT 8080
 #define LISTEN_BACKLOG 10
@@ -49,7 +49,7 @@ hadle_client(int client_sfd)
     char buf[MAX_MSG_SIZE];
     size_t n;
 
-    while ((n = read(client_sfd, buf, MAX_MSG_SIZE)) > 0) {
+    while ( (n = read(client_sfd, buf, MAX_MSG_SIZE)) > 0 ) {
         printf("Request size: %zd\n", n);
 
         struct http_request req = http_parse_request(buf);
@@ -83,6 +83,7 @@ hadle_client(int client_sfd)
     }
 
     printf("Bye client!\n");
+    close(client_sfd);
 }
 
 int 
@@ -121,7 +122,6 @@ main()
         
         printf("Client accepted\n");
         hadle_client(client_sfd);
-        close(client_sfd);
     }
 
     return 0;

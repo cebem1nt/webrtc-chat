@@ -15,7 +15,7 @@
 #include <memory.h>
 #include <string.h>
 
-#include "crypt.h"
+#include "include/crypt.h"
 
 /*
  * The key you have to concatenate with provided client one

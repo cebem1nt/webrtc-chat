@@ -1,4 +1,3 @@
-#include "http_p.h"
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
@@ -7,6 +6,8 @@
 #include <sstream>
 #include <string>
 #include <vector>
+
+#include "include/http_p.h"
 
 #define HTTP_DELIMETER "\r\n"
 
@@ -183,7 +184,7 @@ http_compose_response(struct http_response res)
 static void
 destroy_headers(struct http_headers_array harr) 
 {
-    for (size_t i; i < harr.length; i++) {
+    for (size_t i = 0; i < harr.length; i++) {
         std::free(harr.arr[i].name);
         std::free(harr.arr[i].data);
     }
