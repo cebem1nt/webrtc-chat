@@ -50,7 +50,6 @@ hadle_client(int client_sfd)
     size_t n;
 
     while ((n = read(client_sfd, buf, MAX_MSG_SIZE)) > 0) {
-        printf("Got request: \n%s\n", buf);
         printf("Request size: %zd\n", n);
 
         struct http_request req = http_parse_request(buf);
@@ -60,13 +59,23 @@ hadle_client(int client_sfd)
             const char* res = handle_handshake(req_key);
             printf("Composed response: \n%s\n", res);
             write(client_sfd, res, strlen(res));
-        } else {
-            struct ws_frame fr;
+        } 
+        else {
+            struct ws_in_frame fr;
             if (ws_parse_frame((unsigned char*)buf, n, &fr)) {
                 printf("Parsing error\n");
             } else {
                 printf("Unmasked message: \n%s\n", fr.payload);
                 free(fr.payload);
+            }
+            const char* msg = "Hello client!";
+            struct ws_out_frame out;
+
+            if (ws_to_frame((unsigned char*)msg, 13, &out)) {
+                printf("Could not frame message\n");
+            } else {
+                write(client_sfd, out.frame, out.frame_len);
+                free(out.frame);
             }
         }
 
