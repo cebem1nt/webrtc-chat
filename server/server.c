@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "frames.h"
 #include "http_p.h"
 #include "crypt.h"
 
@@ -46,7 +47,7 @@ void
 hadle_client(int client_sfd) 
 {
     char buf[MAX_MSG_SIZE];
-    ssize_t n;
+    size_t n;
 
     while ((n = read(client_sfd, buf, MAX_MSG_SIZE)) > 0) {
         printf("Got request: \n%s\n", buf);
@@ -59,6 +60,14 @@ hadle_client(int client_sfd)
             const char* res = handle_handshake(req_key);
             printf("Composed response: \n%s\n", res);
             write(client_sfd, res, strlen(res));
+        } else {
+            struct ws_frame fr;
+            if (ws_parse_frame((unsigned char*)buf, n, &fr)) {
+                printf("Parsing error\n");
+            } else {
+                printf("Unmasked message: \n%s\n", fr.payload);
+                free(fr.payload);
+            }
         }
 
         http_destroy_request(req);
