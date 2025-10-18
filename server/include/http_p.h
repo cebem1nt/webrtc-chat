@@ -59,7 +59,7 @@ void http_response_append_header(struct http_response* res, const char* name, co
  * Returns a string representing the HTTP response
  * based on the given http_response structure 
  */
-const char* http_compose_response(struct http_response res);
+char* http_compose_response(struct http_response res);
 
 /*
  * Frees the given request

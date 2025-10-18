@@ -1,7 +1,7 @@
 CXX = g++
 CXXFLAGS = -Wall
 
-SRCS = server/server.c server/crypt.c server/frames.c server/http_p.cpp
+SRCS = server/server.c server/crypt.c server/frames.c server/http_p.cpp server/hmap.cpp
 TARGET = dist/server
 
 all: npm_build $(TARGET)  

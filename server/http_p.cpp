@@ -11,8 +11,8 @@
 
 #define HTTP_DELIMETER "\r\n"
 
-static std::string 
-trim(const std::string& str) {
+static std::string trim(const std::string& str) 
+{
     size_t start = str.find_first_not_of(" \t\n");
     size_t end = str.find_last_not_of(" \t\n");
     
@@ -23,8 +23,7 @@ trim(const std::string& str) {
     return str.substr(start, end - start + 1);
 }
 
-static std::string
-get_status_message(enum http_status_code c) 
+static std::string get_status_message(enum http_status_code c) 
 {
     switch (c) 
     {
@@ -37,8 +36,7 @@ get_status_message(enum http_status_code c)
     }
 }
 
-static void
-resize_headers_array(struct http_headers_array* harr)
+static void resize_headers_array(struct http_headers_array* harr)
 {
     size_t new_cap = harr->capacity * 2;
     auto new_arr = new http_header[new_cap];
@@ -50,8 +48,7 @@ resize_headers_array(struct http_headers_array* harr)
     harr->capacity = new_cap;
 }
 
-static void 
-parse_request_line(struct http_request& req, std::string line) 
+static void parse_request_line(struct http_request& req, std::string line) 
 {
     std::vector<std::string> reqs;
     std::stringstream ss(line);
@@ -66,8 +63,7 @@ parse_request_line(struct http_request& req, std::string line)
     req.path = strdup(reqs[1].c_str());
 }
 
-static void
-parse_header_line(struct http_request& req, std::string line) 
+static void parse_header_line(struct http_request& req, std::string line) 
 {
     size_t colon_pos;
     size_t length = req.headers.length;
@@ -91,8 +87,7 @@ parse_header_line(struct http_request& req, std::string line)
     req.headers.length++;
 }
 
-const char*
-http_get_header_value(struct http_request req, const char* name)
+const char* http_get_header_value(struct http_request req, const char* name)
 {
     // I realy don't want to put a hashmap 
     // so this will be just a for loop
@@ -105,8 +100,7 @@ http_get_header_value(struct http_request req, const char* name)
     return NULL;
 }
 
-struct http_request 
-http_parse_request(char* message) 
+struct http_request http_parse_request(char* message) 
 {
     struct http_request req;
 
@@ -130,8 +124,7 @@ http_parse_request(char* message)
     return req;
 }
 
-struct http_response
-http_new_response(http_status_code_t status) 
+struct http_response http_new_response(http_status_code_t status) 
 {
     struct http_response res;
 
@@ -144,8 +137,7 @@ http_new_response(http_status_code_t status)
     return res;
 }
 
-void
-http_response_append_header(
+void http_response_append_header(
     struct http_response* res, const char* name, const char* data) 
 {
     size_t length = res->headers.length;
@@ -159,8 +151,7 @@ http_response_append_header(
     res->headers.length++;
 }
 
-const char*
-http_compose_response(struct http_response res) 
+char* http_compose_response(struct http_response res) 
 {
     std::stringstream ss;
 
@@ -175,14 +166,11 @@ http_compose_response(struct http_response res)
            << HTTP_DELIMETER;
     }
 
-    // ss << HTTP_DELIMETER;
-
     std::string out = ss.str();
     return strdup(out.c_str());
 }
 
-static void
-destroy_headers(struct http_headers_array harr) 
+static void destroy_headers(struct http_headers_array harr) 
 {
     for (size_t i = 0; i < harr.length; i++) {
         std::free(harr.arr[i].name);
@@ -190,8 +178,7 @@ destroy_headers(struct http_headers_array harr)
     }
 }
 
-void 
-http_destroy_request(struct http_request req) 
+void http_destroy_request(struct http_request req) 
 {
     destroy_headers(req.headers);
 
@@ -200,8 +187,7 @@ http_destroy_request(struct http_request req)
     std::free(req.path);
 }
 
-void 
-http_destroy_response(struct http_response res) 
+void http_destroy_response(struct http_response res) 
 {
     destroy_headers(res.headers);
 }

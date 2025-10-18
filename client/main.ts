@@ -21,12 +21,11 @@ async function start() {
 
     // Connection opened
     socket.addEventListener("open", (event) => {
-        console.log("Hello World!");
         socket.send("Hello Server!");
     });
 
     // Listen for messages
     socket.addEventListener("message", (event) => {
-        console.log("Message from server ", event.data);
+        console.log(event.data);
     });
 }
