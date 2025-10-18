@@ -84,7 +84,7 @@ hadle_client(int client_sfd, clients_map cmap)
                 break;
 
             write(client_sfd, response_raw, strlen(response_raw));
-            clients_map_set(cmap, client_sfd, NULL); // <- here 
+            clients_map_set(cmap, client_sfd, "empty");
             free(response_raw);
         }
 
