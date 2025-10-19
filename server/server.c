@@ -1,4 +1,4 @@
-#include <signal.h>
+#include <pthread.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <sys/socket.h>
@@ -18,6 +18,14 @@
 #define LISTEN_BACKLOG 10
 #define MAX_MSG_SIZE 2048
 
+typedef struct {
+    int client_sfd;
+    clients_hset chs;
+    rooms_hmap rhm;
+} thread_arg_t;
+
+static pthread_mutex_t maps_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 /* 
  * manpages: socket(2), sockaddr_in, listen(2),
  *           ip(7), bind(2), accept(2), htonl
@@ -31,13 +39,31 @@ err_exit(const char* reason)
     exit(EXIT_FAILURE);
 }
 
+char*
+get_room_id(char* msg) 
+{
+    char* p = strchr(msg, ':');
+    
+    if (p && *(p+1) != '\0') {
+        return strdup(p+1);
+    }
+
+    return NULL;
+}
+
 int
-handle_websocket(
-    int client_sfd, char* client_room, char* msg_raw, size_t msg_size, clients_hset chs, rooms_hmap rhm)
+handle_websocket(int client_sfd, char** client_room, char* msg_raw, 
+                 size_t msg_size, clients_hset chs, rooms_hmap rhm)
 {
     unsigned char* umsg_raw = (unsigned char*) msg_raw;
     struct ws_in_frame  inf;
     struct ws_out_frame outf;
+
+    if (*client_room) {
+        printf("Current client (%i) room: %s\n", client_sfd, *client_room);
+    } else {
+        printf("Current client (%i) has no room.\n", client_sfd);
+    }
 
     if (ws_parse_frame(umsg_raw, msg_size, &inf)) {
         printf("Error when parsing ws frame.\n");
@@ -50,34 +76,30 @@ handle_websocket(
     case WSOP_TEXT:
         break; // This is text, we can proceed it
 
-    default:
     case WSOP_EXIT:
-        clients_hset_delete(chs, client_sfd);
-        rooms_map_delete_client(rhm, client_room, client_sfd);
-        return 2;
+    default:
+        return 1;
     }
 
     if (message[0] != '{') {
-        char* room_id = NULL;
-        char* p = strchr(message, ':');
-        
-        if (p && *(p+1) != '\0') {
-            room_id = p+1;
-            client_room = strdup(room_id);
-            rooms_hmap_append_client(rhm, room_id, client_sfd);
-        }
+        *client_room = get_room_id(message);
+        rooms_hmap_append_client(rhm, *client_room, client_sfd);
+        printf("Client added to room: \"%s\" \n", *client_room);
     } 
     else { // It is json message, broadcast it to anyone in the same room
-        int* clients_in_room = rooms_hmap_get(rhm, client_room);
-        printf("Broadcating to %s", client_room);
+        int* clients_in_room = rooms_hmap_get(rhm, *client_room);
+        printf("Broadcasting...\n");
 
         for (int i = 0; i < MAX_CLIENTS_PER_ROOM; i++) {
             int client = clients_in_room[i];
-            if (client != -1) {
+
+            if (client != -1 && client != client_sfd) {
                 ws_to_frame(inf.payload, inf.payload_len, &outf);
                 write(client, outf.payload, outf.payload_len);
             }
-        }
+        } 
+
+        free(clients_in_room);
     }
 
     free(inf.payload);
@@ -113,9 +135,14 @@ handshake(char* request_raw)
     return out;
 }
 
-void 
-hadle_client(int client_sfd, clients_hset chs, rooms_hmap rhm) 
+void* 
+hadle_client(void* arg_v) 
 {
+    thread_arg_t* arg = (thread_arg_t*) arg_v;
+    int client_sfd = arg->client_sfd;
+    clients_hset chs = arg->chs;
+    rooms_hmap rhm = arg->rhm;
+    
     char   buf[MAX_MSG_SIZE];
     char*  client_room = NULL;
     size_t n;
@@ -123,7 +150,9 @@ hadle_client(int client_sfd, clients_hset chs, rooms_hmap rhm)
     while ((n = read(client_sfd, buf, MAX_MSG_SIZE)) > 0 ) {
         printf("New message, size: %zd\n", n);
 
+        pthread_mutex_lock(&maps_mutex);
         bool is_recognized = clients_hset_has(chs, client_sfd);
+        pthread_mutex_unlock(&maps_mutex);
 
         /* 
          * If we dont have mapped socket fd, then assume incoming request
@@ -131,28 +160,42 @@ hadle_client(int client_sfd, clients_hset chs, rooms_hmap rhm)
          * treat the buffer as data frame.
          */
         if (!is_recognized) {
-            printf("Client %i is not recognized, trying to handshake...\n", client_sfd);
+            printf("Client %i is not recognized, handshake\n", client_sfd);
 
             char* response_raw = handshake(buf);
             if (!response_raw)
                 break;
             
             write(client_sfd, response_raw, strlen(response_raw));
+
+            pthread_mutex_lock(&maps_mutex);
             clients_hset_set(chs, client_sfd);
+            pthread_mutex_unlock(&maps_mutex);
+
             free(response_raw);
         }
 
         else if (is_recognized) {
-            int code = handle_websocket(client_sfd, client_room, buf, n, chs, rhm);
-            if (code == 2) {
+            pthread_mutex_lock(&maps_mutex);
+            if (handle_websocket(client_sfd, &client_room, buf, n, chs, rhm)) {
                 break;
             }
+            pthread_mutex_unlock(&maps_mutex);
         }
     }
 
     printf("Bye client!\n");
+
+    pthread_mutex_lock(&maps_mutex);
+    clients_hset_delete(chs, client_sfd);
+    rooms_map_delete_client(rhm, client_room, client_sfd);
+    pthread_mutex_unlock(&maps_mutex);
+    
     close(client_sfd);
-    _exit(EXIT_SUCCESS);
+    free(client_room);
+    free(arg);
+    
+    return NULL;
 }
 
 int 
@@ -185,7 +228,6 @@ main()
 
     // Listen for any connections
     printf("Server is listening\n");
-    signal(SIGCHLD, SIG_IGN); // We will ignore return codes of children, i don't like zombie processes
 
     while (1) { 
         socklen_t client_addr_s = sizeof(client_addr);
@@ -194,16 +236,25 @@ main()
         if (client_sfd == -1)
             err_exit("accept");
         
-        pid_t pid = fork();
-        if (pid == -1)
-            err_exit("fork");
+        printf("Client accepted\n");
 
-        if (pid == 0) {            
-            printf("Client accepted\n");
+        pthread_t tid;
+        thread_arg_t* targ = (thread_arg_t*) malloc(sizeof(thread_arg_t));
+        if (!targ)
+            err_exit("malloc");
 
-            close(server_sfd);
-            hadle_client(client_sfd, chs, rmap);
-        }
+        targ->client_sfd = client_sfd;
+        targ->chs = chs;
+        targ->rhm = rmap;
+
+        pthread_attr_t attr;
+        pthread_attr_init(&attr);
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
+        if (pthread_create(&tid, &attr, hadle_client, targ) != 0)
+            err_exit("pthread_create");
+
+        pthread_attr_destroy(&attr);
     }
 
     return 0;
