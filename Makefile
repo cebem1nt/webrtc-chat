@@ -1,19 +1,19 @@
 CXX = g++
 CXXFLAGS = -Wall
 
-SRCS = server/server.c server/crypt.c server/frames.c server/http_p.cpp server/hmap.cpp
+SRCS = server/server.c server/crypt.c server/frames.c server/http_p.cpp server/structs.cpp
 TARGET = dist/server
 
-all: npm_build $(TARGET)  
+all: tsc_build $(TARGET)  
 
 $(TARGET): $(SRCS)
 	mkdir -p dist
 	$(CXX) $(CXXFLAGS) $(SRCS) -o $(TARGET)
 
-npm_build:
-	npm run build
+tsc_build:
+	tsc
 
-run: $(TARGET) npm_build
+run: $(TARGET) tsc_build
 	./$(TARGET)
 
 clean:

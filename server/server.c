@@ -1,3 +1,4 @@
+#include <signal.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <sys/socket.h>
@@ -8,7 +9,8 @@
 #include <unistd.h>
 
 #include "include/frames.h"
-#include "include/hmap.h"
+#include "include/structs.h"
+#include "include/structs.h"
 #include "include/http_p.h"
 #include "include/crypt.h"
 
@@ -22,12 +24,55 @@
  *
  */
 
-
 void 
 err_exit(const char* reason) 
 {
     perror(reason);
     exit(EXIT_FAILURE);
+}
+
+int
+handle_websocket(int client_sfd, char* msg_raw, size_t msg_size)
+{
+    unsigned char* umsg_raw = (unsigned char*) msg_raw;
+    struct ws_in_frame  inf;
+    struct ws_out_frame outf;
+
+    if (ws_parse_frame(umsg_raw, msg_size, &inf)) {
+        printf("Error when parsing ws frame.\n");
+        return 1;
+    }
+
+    char* message = (char*) inf.payload;
+
+    switch (inf.opcode) {
+    case WSOP_TEXT:
+        break;
+
+    default:
+    case WSOP_EXIT:
+        // Remove client!!!
+        return 2;
+    }
+
+    if (message[0] != '{') {
+        char* room_id = NULL;
+        char* p = strchr(message, ':');
+        
+        if (p && *(p+1) != '\0') {
+            room_id = p+1;
+            printf("%s", room_id);
+            if (ws_to_frame((unsigned char*)room_id, strlen(room_id), &outf)) {
+                printf("Could not frame the response.\n");
+            } 
+        }
+
+        write(client_sfd, outf.payload, outf.frame_len);
+        free(outf.payload);
+    }
+
+    free(inf.payload);
+    return 0;
 }
 
 /*
@@ -37,7 +82,6 @@ err_exit(const char* reason)
 char*
 handshake(char* request_raw)
 {
-    // 1 - Parse request & Extract key 
     struct http_request req = http_parse_request(request_raw);
     const char* req_key = http_get_header_value(req, "Sec-WebSocket-Key");
 
@@ -61,7 +105,7 @@ handshake(char* request_raw)
 }
 
 void 
-hadle_client(int client_sfd, clients_map cmap) 
+hadle_client(int client_sfd, clients_hset chs) 
 {
     char buf[MAX_MSG_SIZE];
     size_t n;
@@ -69,7 +113,7 @@ hadle_client(int client_sfd, clients_map cmap)
     while ((n = read(client_sfd, buf, MAX_MSG_SIZE)) > 0 ) {
         printf("New message, size: %zd\n", n);
 
-        bool is_recognized = clients_map_has(cmap, client_sfd);
+        bool is_recognized = clients_hset_has(chs, client_sfd);
 
         /* 
          * If we dont have mapped socket fd, then assume incoming request
@@ -82,41 +126,32 @@ hadle_client(int client_sfd, clients_map cmap)
             char* response_raw = handshake(buf);
             if (!response_raw)
                 break;
-
+            
             write(client_sfd, response_raw, strlen(response_raw));
-            clients_map_set(cmap, client_sfd, "empty");
+            clients_hset_set(chs, client_sfd);
             free(response_raw);
         }
 
         else if (is_recognized) {
-            struct ws_in_frame fr;
-            if (ws_parse_frame((unsigned char*)buf, n, &fr)) {
-                printf("Parsing error!\n");
-            } else {
-                printf("Unmasked message: \n%s\n", fr.payload);
-                free(fr.payload);
-            }
-            const char* msg = "Hello client!";
-            struct ws_out_frame out;
-
-            if (ws_to_frame((unsigned char*)msg, 13, &out)) {
-                printf("Could not frame message\n");
-            } else {
-                write(client_sfd, out.frame, out.frame_len);
-                free(out.frame);
+            int code = handle_websocket(client_sfd, buf, n);
+            if (code == 2) {
+                break;
             }
         }
     }
 
     printf("Bye client!\n");
     close(client_sfd);
+    _exit(EXIT_SUCCESS);
 }
 
 int 
 main()
 {
     int server_sfd, client_sfd;
-    clients_map cmap = clients_map_new();
+
+    clients_hset chs = clients_hset_new();
+    // rooms_hmap rmap = rooms_hmap_new();
 
     struct sockaddr_in server_addr = {0};
     struct sockaddr    client_addr = {0};
@@ -140,23 +175,24 @@ main()
 
     // Listen for any connections
     printf("Server is listening\n");
+    signal(SIGCHLD, SIG_IGN); // We will ignore return codes of children, i don't like zombie processes
+
     while (1) { 
         socklen_t client_addr_s = sizeof(client_addr);
+
         client_sfd = accept(server_sfd, &client_addr, &client_addr_s);
+        if (client_sfd == -1)
+            err_exit("accept");
         
         pid_t pid = fork();
         if (pid == -1)
             err_exit("fork");
 
         if (pid == 0) {            
-            if (client_sfd == -1)
-                err_exit("accept");
-            
             printf("Client accepted\n");
 
             close(server_sfd);
-            hadle_client(client_sfd, cmap);
-            _exit(EXIT_SUCCESS); 
+            hadle_client(client_sfd, chs);
         }
     }
 

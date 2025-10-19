@@ -1,6 +1,6 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
 #include <stdint.h>
 
 #include "include/frames.h"
@@ -26,10 +26,8 @@
 + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
 |                     Payload Data continued ...                |
 +---------------------------------------------------------------+
-
 */
-int
-ws_to_frame(unsigned char* buf, size_t buf_size, struct ws_out_frame* out) 
+int ws_to_frame(unsigned char* buf, size_t buf_size, struct ws_out_frame* out) 
 {
     const uint8_t fin_opcode = 0x80 | 0x1; // FIN=1, opcode=1 (text)
     uint64_t payload_len = buf_size;
@@ -73,17 +71,16 @@ ws_to_frame(unsigned char* buf, size_t buf_size, struct ws_out_frame* out)
 
     memcpy(frame + header_len, buf, payload_len);
     
-    out->frame = frame;
+    out->payload = frame;
     out->frame_len = total_len;
 
     return 0;
 }
 
 /*
-
  Client to server frame diagram
 
- 0                   1                   2                   3
+ 0                 1                   2                   3
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
 +-+-+-+-+-------+-+-------------+-------------------------------+
 |F|R|R|R| opcode|M| Payload len |          Masking-key          |
@@ -97,25 +94,22 @@ ws_to_frame(unsigned char* buf, size_t buf_size, struct ws_out_frame* out)
 + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
 |                     Payload Data continued ...                |
 +---------------------------------------------------------------+
- 
- */
+*/
 
-int
-ws_parse_frame(unsigned char* buf, size_t buf_size, struct ws_in_frame* out) 
+int ws_parse_frame(unsigned char* buf, size_t buf_size, struct ws_in_frame* out) 
 {
     uint8_t b0 = buf[0];
     uint8_t b1 = buf[1];
 
-    out->fin  = (b0 >> 7) & 0x1;
-    out->mask = (b1 >> 7) & 0x1; 
+    out->fin    = (b0 >> 7) & 0x1;
+    out->mask   = (b1 >> 7) & 0x1;
+    out->opcode = b0 & 0x0F;
 
     if (!out->mask)
         return 1;
 
-    out->opcode = b0 & 0x0F;
-
     uint64_t payload_len = b1 & 0x7F;
-    size_t header_len = 2;
+    size_t   header_len = 2;
 
     // Extract payload length
     if (payload_len <= 125) {
