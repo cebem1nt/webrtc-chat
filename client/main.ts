@@ -5,24 +5,71 @@ const RTC_SETTINGS = {
     ]
 }
 
+function toServer(message: object | string) {
+    if (typeof message == "object") {
+        message = JSON.stringify(message)
+    }
+
+    server.send(message)
+}
+
+function handleChannelMessage(event: MessageEvent) {
+    console.log("received:", event.data)
+}
+
+const roomID = prompt("Enter room name:", "room_123")
 const server = new WebSocket("ws://" + SERVER_URL)
-const pc = new RTCPeerConnection(RTC_SETTINGS)
+const peer = new RTCPeerConnection(RTC_SETTINGS)
+
+let dataChanel: RTCDataChannel | null = null
 
 server.addEventListener("open", () => {
-    server.send("roomID:" + "RoomID")
+    toServer("roomID:" + roomID)
 })
 
 server.addEventListener("message", async (event) => {
-    console.log(event.data)
-    const msg = JSON.parse(event.data);
+    const msg = JSON.parse(event.data)
+    console.log(msg)
+
     if (msg.answer) {
-        const remoteDesc = new RTCSessionDescription(msg.answer)
-        await pc.setRemoteDescription(remoteDesc)
+        await peer.setRemoteDescription(new RTCSessionDescription(msg.answer))
+    } 
+    else if (msg.offer) {
+        await peer.setRemoteDescription(new RTCSessionDescription(msg.offer))
+        const answer = await peer.createAnswer()
+        await peer.setLocalDescription(answer)
+        toServer({answer})
+    }
+    else if (msg.candidate) {
+        try {
+            await peer.addIceCandidate(msg.candidate);
+        } catch (e) {
+            console.error("Error adding received ice candidate", e)
+        }
     }
 });
 
-async function start() {  
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    server.send(JSON.stringify({"offer": offer}));
+peer.onicecandidate = (ev) => {
+    if (ev.candidate) {
+        toServer({"candidate": ev.candidate})
+    }
+}
+
+peer.onconnectionstatechange = () => {
+    if (peer.connectionState === "connected") {
+        console.log("Peers connected!")
+    }
+};
+
+peer.ondatachannel = (event) => {
+    dataChanel = event.channel
+    dataChanel.onmessage = handleChannelMessage
+};
+
+async function start() {
+    dataChanel = peer.createDataChannel("chat")
+    const offer = await peer.createOffer()
+
+    await peer.setLocalDescription(offer)
+    toServer({offer})
 }

@@ -1,4 +1,5 @@
 #include <cstddef>
+#include <cstdio>
 #include <iostream>
 #include <ostream>
 #include <unordered_map>

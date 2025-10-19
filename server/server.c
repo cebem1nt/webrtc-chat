@@ -86,7 +86,7 @@ handle_websocket(int client_sfd, char** client_room, char* msg_raw,
         rooms_hmap_append_client(rhm, *client_room, client_sfd);
         printf("Client added to room: \"%s\" \n", *client_room);
     } 
-    else { // It is json message, broadcast it to anyone in the same room
+    else if (*client_room) { // It is json message, broadcast it to anyone in the same room
         int* clients_in_room = rooms_hmap_get(rhm, *client_room);
         printf("Broadcasting...\n");
 
