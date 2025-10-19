@@ -32,7 +32,8 @@ err_exit(const char* reason)
 }
 
 int
-handle_websocket(int client_sfd, char* msg_raw, size_t msg_size)
+handle_websocket(
+    int client_sfd, char* client_room, char* msg_raw, size_t msg_size, clients_hset chs, rooms_hmap rhm)
 {
     unsigned char* umsg_raw = (unsigned char*) msg_raw;
     struct ws_in_frame  inf;
@@ -47,11 +48,12 @@ handle_websocket(int client_sfd, char* msg_raw, size_t msg_size)
 
     switch (inf.opcode) {
     case WSOP_TEXT:
-        break;
+        break; // This is text, we can proceed it
 
     default:
     case WSOP_EXIT:
-        // Remove client!!!
+        clients_hset_delete(chs, client_sfd);
+        rooms_map_delete_client(rhm, client_room, client_sfd);
         return 2;
     }
 
@@ -61,14 +63,21 @@ handle_websocket(int client_sfd, char* msg_raw, size_t msg_size)
         
         if (p && *(p+1) != '\0') {
             room_id = p+1;
-            printf("%s", room_id);
-            if (ws_to_frame((unsigned char*)room_id, strlen(room_id), &outf)) {
-                printf("Could not frame the response.\n");
-            } 
+            client_room = strdup(room_id);
+            rooms_hmap_append_client(rhm, room_id, client_sfd);
         }
+    } 
+    else { // It is json message, broadcast it to anyone in the same room
+        int* clients_in_room = rooms_hmap_get(rhm, client_room);
+        printf("Broadcating to %s", client_room);
 
-        write(client_sfd, outf.payload, outf.frame_len);
-        free(outf.payload);
+        for (int i = 0; i < MAX_CLIENTS_PER_ROOM; i++) {
+            int client = clients_in_room[i];
+            if (client != -1) {
+                ws_to_frame(inf.payload, inf.payload_len, &outf);
+                write(client, outf.payload, outf.payload_len);
+            }
+        }
     }
 
     free(inf.payload);
@@ -105,9 +114,10 @@ handshake(char* request_raw)
 }
 
 void 
-hadle_client(int client_sfd, clients_hset chs) 
+hadle_client(int client_sfd, clients_hset chs, rooms_hmap rhm) 
 {
-    char buf[MAX_MSG_SIZE];
+    char   buf[MAX_MSG_SIZE];
+    char*  client_room = NULL;
     size_t n;
 
     while ((n = read(client_sfd, buf, MAX_MSG_SIZE)) > 0 ) {
@@ -133,7 +143,7 @@ hadle_client(int client_sfd, clients_hset chs)
         }
 
         else if (is_recognized) {
-            int code = handle_websocket(client_sfd, buf, n);
+            int code = handle_websocket(client_sfd, client_room, buf, n, chs, rhm);
             if (code == 2) {
                 break;
             }
@@ -151,7 +161,7 @@ main()
     int server_sfd, client_sfd;
 
     clients_hset chs = clients_hset_new();
-    // rooms_hmap rmap = rooms_hmap_new();
+    rooms_hmap rmap = rooms_hmap_new();
 
     struct sockaddr_in server_addr = {0};
     struct sockaddr    client_addr = {0};
@@ -192,7 +202,7 @@ main()
             printf("Client accepted\n");
 
             close(server_sfd);
-            hadle_client(client_sfd, chs);
+            hadle_client(client_sfd, chs, rmap);
         }
     }
 

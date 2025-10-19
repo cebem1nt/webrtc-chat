@@ -7,6 +7,8 @@
 #ifndef _HMAP_H
 #define _HMAP_H
 
+#define MAX_CLIENTS_PER_ROOM 10
+
 typedef void* rooms_hmap;
 typedef void* clients_hset;
 
@@ -20,9 +22,9 @@ int* rooms_hmap_get(rooms_hmap map, char* room_id);
 
 bool rooms_hmap_has(rooms_hmap map, char* room_id);
 
-void rooms_hmap_set(rooms_hmap map, char* room_id, int* clients_arr);
+void rooms_hmap_append_client(rooms_hmap map, char* room_id, int client_id);
 
-void rooms_hmap_delete(rooms_hmap map, char* room_id);
+void rooms_map_delete_client(rooms_hmap map, char* room_id, int client_id);
 
 void rooms_hmap_free(rooms_hmap map);
 

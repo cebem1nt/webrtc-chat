@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <unordered_map>
 #include <cstdlib>
 #include <cstring>
@@ -6,7 +7,7 @@
 #include "include/structs.h"
 
 using rhmap = std::unordered_map<char*, int*>; // Array of integers
-using chset = std::unordered_set<int> ;
+using chset = std::unordered_set<int>;
 
 rooms_hmap rooms_hmap_new() 
 {
@@ -37,24 +38,49 @@ bool rooms_hmap_has(rooms_hmap map, char* room_id)
     return false;
 }
 
-void rooms_hmap_set(rooms_hmap map, char* room_id, int* clients_arr)
+void rooms_hmap_append_client(rooms_hmap map, char* room_id, int client_id)
 {
+    int* clients_in_room = rooms_hmap_get(map, room_id); 
     rhmap* m = static_cast<rhmap*>(map);
+
+    if (clients_in_room) {
+        for (int i = 0; i < MAX_CLIENTS_PER_ROOM; i++) {
+            if (clients_in_room[i] == -1)
+                clients_in_room[i] = client_id;
+        }
+    } 
+    else {
+        clients_in_room = new int[MAX_CLIENTS_PER_ROOM];
+        clients_in_room[0] = client_id;
+    }
+
     m->insert(
-        {room_id, clients_arr}
+        {strdup(room_id), clients_in_room}
     );
 }
 
-void rooms_map_delete(rooms_hmap map, char* room_id)
+void rooms_map_delete_client(rooms_hmap map, char* room_id, int client_id)
 {
+    int* clients_in_room = rooms_hmap_get(map, room_id); 
     rhmap* m = static_cast<rhmap*>(map);
-    m->erase(room_id);
+
+    if (clients_in_room) {
+        for (int i = 0; i < MAX_CLIENTS_PER_ROOM; i++) {
+            if (clients_in_room[i] == client_id)
+                clients_in_room[i] = -1;
+        }
+    }
+   
+    m->insert(
+        {strdup(room_id), clients_in_room}
+    );
 }
 
 void rooms_hmap_free(rooms_hmap map)
 {
     rhmap* m = static_cast<rhmap*>(map);
     for (auto &p : *m) { 
+        free(p.first); 
         free(p.second); 
     }
     delete m;

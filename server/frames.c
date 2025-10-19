@@ -72,7 +72,7 @@ int ws_to_frame(unsigned char* buf, size_t buf_size, struct ws_out_frame* out)
     memcpy(frame + header_len, buf, payload_len);
     
     out->payload = frame;
-    out->frame_len = total_len;
+    out->payload_len = total_len;
 
     return 0;
 }

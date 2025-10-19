@@ -23,7 +23,7 @@ struct ws_in_frame {
 
 struct ws_out_frame {
     unsigned char* payload;
-    size_t frame_len;
+    size_t payload_len;
 };
 
 /*
