@@ -53,17 +53,11 @@ get_room_id(char* msg)
 
 int
 handle_websocket(int client_sfd, char** client_room, char* msg_raw, 
-                 size_t msg_size, clients_hset chs, rooms_hmap rhm)
+                 size_t msg_size, rooms_hmap rhm)
 {
     unsigned char* umsg_raw = (unsigned char*) msg_raw;
     struct ws_in_frame  inf;
     struct ws_out_frame outf;
-
-    if (*client_room) {
-        printf("Current client (%i) room: %s\n", client_sfd, *client_room);
-    } else {
-        printf("Current client (%i) has no room.\n", client_sfd);
-    }
 
     if (ws_parse_frame(umsg_raw, msg_size, &inf)) {
         printf("Error when parsing ws frame.\n");
@@ -84,11 +78,9 @@ handle_websocket(int client_sfd, char** client_room, char* msg_raw,
     if (message[0] != '{') {
         *client_room = get_room_id(message);
         rooms_hmap_append_client(rhm, *client_room, client_sfd);
-        printf("Client added to room: \"%s\" \n", *client_room);
     } 
     else if (*client_room) { // It is json message, broadcast it to anyone in the same room
         int* clients_in_room = rooms_hmap_get(rhm, *client_room);
-        printf("Broadcasting...\n");
 
         for (int i = 0; i < MAX_CLIENTS_PER_ROOM; i++) {
             int client = clients_in_room[i];
@@ -148,7 +140,12 @@ hadle_client(void* arg_v)
     size_t n;
 
     while ((n = read(client_sfd, buf, MAX_MSG_SIZE)) > 0 ) {
-        printf("New message, size: %zd\n", n);
+        printf("Message from (%i), size: %zd\n", client_sfd, n);
+        if (client_room) {
+            printf("\t(%i) room: %s\n", client_sfd, client_room);
+        } else {
+            printf("\t(%i) has no room.\n", client_sfd);
+        }
 
         pthread_mutex_lock(&maps_mutex);
         bool is_recognized = clients_hset_has(chs, client_sfd);
@@ -160,7 +157,7 @@ hadle_client(void* arg_v)
          * treat the buffer as data frame.
          */
         if (!is_recognized) {
-            printf("Client %i is not recognized, handshake\n", client_sfd);
+            printf("\t(%i) is not recognized, handshake\n", client_sfd);
 
             char* response_raw = handshake(buf);
             if (!response_raw)
@@ -177,14 +174,15 @@ hadle_client(void* arg_v)
 
         else if (is_recognized) {
             pthread_mutex_lock(&maps_mutex);
-            if (handle_websocket(client_sfd, &client_room, buf, n, chs, rhm)) {
+            if (handle_websocket(client_sfd, &client_room, buf, n, rhm)) {
+                pthread_mutex_unlock(&maps_mutex);
                 break;
             }
             pthread_mutex_unlock(&maps_mutex);
         }
     }
 
-    printf("Bye client!\n");
+    printf("\nBye client! (%i)\n", client_sfd);
 
     pthread_mutex_lock(&maps_mutex);
     clients_hset_delete(chs, client_sfd);
@@ -236,7 +234,7 @@ main()
         if (client_sfd == -1)
             err_exit("accept");
         
-        printf("Client accepted\n");
+        printf("Client (%i) accepted\n\n", client_sfd);
 
         pthread_t tid;
         thread_arg_t* targ = (thread_arg_t*) malloc(sizeof(thread_arg_t));

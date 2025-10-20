@@ -1,7 +1,5 @@
 #include <cstddef>
 #include <cstdio>
-#include <iostream>
-#include <ostream>
 #include <unordered_map>
 #include <cstdlib>
 #include <cstring>
@@ -60,7 +58,6 @@ void rooms_hmap_append_client(rooms_hmap map, char* room_id, int client_id)
     auto it = m->find(key);
     
     if (it == m->end()) {
-        std::cout << room_id << " Dont exist" << std::endl;
         arr = (int*) malloc(sizeof(int) * MAX_CLIENTS_PER_ROOM);
         for (int i = 0; i < MAX_CLIENTS_PER_ROOM; ++i) {
             arr[i] = -1;
@@ -70,7 +67,6 @@ void rooms_hmap_append_client(rooms_hmap map, char* room_id, int client_id)
         return;
     }
     else {
-        std::cout << room_id << " Exists" << std::endl;
         arr = it->second;
     }
 

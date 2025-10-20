@@ -5,13 +5,73 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>Chat</title>
+    <style>
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            box-sizing: border-box;
+        }
+
+        #chat {
+            width: 600px; 
+            height: 90%;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            border: 1px solid grey;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            padding: 5px;
+        }
+
+        .remote-message {
+            background-color: grey;
+            padding: 5px;
+            border-radius: 5px;
+            align-self: flex-start;
+            margin-left: 5px;
+        }
+
+        .local-message {
+            background-color: grey;
+            padding: 5px;
+            border-radius: 5px;
+            align-self: flex-end;
+            margin-right: 5px;
+        }
+
+        .composer {
+            width: 600px;
+            display: flex;
+            gap: 8px;
+            box-sizing: border-box;
+        }
+
+        .composer form input{
+            flex: 1;
+        }
+
+        .composer form button {
+            flex: 0 0 auto;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
-        <div class="chat">
-
+        <div id="chat">
+            
         </div>
-        <input type="text" id="message"> <button id="send">Send</button> <button onclick="start()">Connect</button>
+        <div class="composer">
+            <form style="display: contents;" onsubmit="event.preventDefault()">
+                <input type="text" id="local-input"> 
+                <button id="send" type="submit">Send</button>
+            </form>
+            <button onclick="start()" id="connect">Connect</button>
+        </div>
     </div>
 
     <script src="../dist/main.js"></script>
